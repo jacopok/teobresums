@@ -317,7 +317,7 @@ int EOBRun(Waveform **hpc, WaveformFD **hfpc,
   }
 
   /* Compute initial radius */
-  double f0 = EOBPars->initial_frequency/time_unit_fact;
+  double f0 = EOBPars->initial_frequency_evolve/time_unit_fact;
   
   EOBPars->f0 = f0;
   double r0;

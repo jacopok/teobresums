@@ -152,6 +152,9 @@ enum{Ix, Iy, Iz, IN3};
 #define TEOB_LAMBDA_TOL (1.0)   /* Minimum tidal Lambda_2 value */
 #define TEOB_R0_THRESHOLD (14)  /* PA minimum tolerated radius */
 #define POSTADIABATIC_NSTEP_MIN (10) /* Minimum requires PA steps, any less than this, the code switches off PA */
+#define SPA_F0_SAFETY (0.05)    /* Fractional margin by which the FD evolution is
+                                   started below the requested initial frequency,
+                                   so that the SPA covers the whole requested band */
 
 /** Simple/generic error handler */
 #define ERROR (1) /** generic error int */
@@ -670,6 +673,7 @@ typedef struct tagEOBParameters
 
   double r0;                    /**< Initial radial separation */
   double initial_frequency;     /**< initial frequency */
+  double initial_frequency_evolve; /**< Frequency at which the evolution is started (FD: below the requested band, see SPA_F0_SAFETY) */
   double f0;                    /**< initial frequency in geom units */
   double distance;              /**< distance */
   double inclination;           /**< inclination */
