@@ -1476,7 +1476,7 @@ double alpha_initial_condition(EOBParameters *eobp)
 {
   double q 	   = eobp->q;
   double nu    = eobp->nu;
-  double f0 	 = eobp->initial_frequency;
+  double f0 	 = eobp->initial_frequency_evolve;
   double chi1x = eobp->chi1x;
   double chi1y = eobp->chi1y;
   double chi1z = eobp->chi1z;

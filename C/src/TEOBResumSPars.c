@@ -113,6 +113,7 @@ void EOBParameters_defaults (int choose, EOBParameters *eobp)
 
   eobp->r0 = 0.;
   eobp->initial_frequency = 0.004;
+  eobp->initial_frequency_evolve = 0.004;
 
   eobp->LambdaAl2 = 0.; // Tidal gravitoelectric parameter Lambda for star A ell=2
   eobp->LambdaBl2 = 0.;
@@ -732,6 +733,23 @@ int eob_set_params(int UNUSED(default_choice), int UNUSED(firstcall))
     if (VERBOSE)
       if (EOBPars->interp_uniform_grid)
 	PRFORMd("dt_interp",EOBPars->dt_interp);
+  }
+
+  /* Frequency at which the evolution is started.
+     In the FD, the SPA maps the TD waveform onto the instantaneous frequency of
+     each mode, F_lm = (1/2pi) dphi_lm/dt. At the first time sample F_lm sits
+     *above* the requested initial frequency, both because r0 is estimated from
+     the Keplerian relation and because the tail contributes to dphi_lm/dt.
+     The lowest bins of the requested band would then carry no SPA data and be
+     filled by extrapolation, which flattens the phase gradient there.
+     Start the evolution slightly earlier to cover the whole requested band. */
+  EOBPars->initial_frequency_evolve = EOBPars->initial_frequency;
+  if (EOBPars->domain == DOMAIN_FD) {
+    double f0_band = EOBPars->initial_frequency;
+    if (EOBPars->interp_freqs)
+      for (int i = 0; i < EOBPars->freqs_size; i++)
+        if (EOBPars->freqs[i] > 0. && EOBPars->freqs[i] < f0_band) f0_band = EOBPars->freqs[i];
+    EOBPars->initial_frequency_evolve = f0_band * (1. - SPA_F0_SAFETY);
   }
 
   /* Function pointers */

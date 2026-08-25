@@ -296,7 +296,7 @@ int EOBRun(Waveform **hpc, WaveformFD **hfpc,
   }
   
   /* Compute initial radius */
-  const double f0 = EOBPars->initial_frequency/time_unit_fact;
+  const double f0 = EOBPars->initial_frequency_evolve/time_unit_fact;
   double r0 = eob_dyn_r0_Kepler(f0);
   //double r0 = eob_dyn_r0_eob(f0, dyn); /* TODO: Radius from EOB equations. This is what should be used. */
 
@@ -340,7 +340,7 @@ int EOBRun(Waveform **hpc, WaveformFD **hfpc,
   if (use_spins == MODE_SPINS_GENERIC && EOBPars->project_spins) {
     int tmp_nqc = EOBPars->nqc_coefs_flx;
     EOBPars->nqc_coefs_flx = NQC_FLX_NONE;
-    if (eob_spin_dyn(spindyn, NULL, NULL, Pi * EOBPars->initial_frequency/time_unit_fact))
+    if (eob_spin_dyn(spindyn, NULL, NULL, Pi * EOBPars->initial_frequency_evolve/time_unit_fact))
       errorexit("problem during spin dynamics");
     EOBPars->nqc_coefs_flx = tmp_nqc;
 
@@ -900,7 +900,7 @@ int EOBRun(Waveform **hpc, WaveformFD **hfpc,
   
   /* Precessing BNS + EOB flux: */
   if(EOBPars->binary == BINARY_BNS && use_spins == MODE_SPINS_GENERIC && !(EOBPars->project_spins)){
-    if (eob_spin_dyn(spindyn, dyn, hlm, Pi*EOBPars->initial_frequency/time_unit_fact))
+    if (eob_spin_dyn(spindyn, dyn, hlm, Pi*EOBPars->initial_frequency_evolve/time_unit_fact))
       errorexit("problem during spin dynamics");
     spindyn->data[EOB_EVOLVE_SPIN_alp][0] = spindyn->data[EOB_EVOLVE_SPIN_alp][1];
     spindyn->data[EOB_EVOLVE_SPIN_gam][0] = spindyn->data[EOB_EVOLVE_SPIN_gam][1];
@@ -1045,7 +1045,7 @@ int EOBRun(Waveform **hpc, WaveformFD **hfpc,
 
     /* Precessing BBH + EOB flux: */
     if(use_spins == MODE_SPINS_GENERIC && !(EOBPars->project_spins)){
-      if (eob_spin_dyn(spindyn, dyn, hlm, Pi*EOBPars->initial_frequency/time_unit_fact))
+      if (eob_spin_dyn(spindyn, dyn, hlm, Pi*EOBPars->initial_frequency_evolve/time_unit_fact))
         errorexit("problem during spin dynamics");
       spindyn->data[EOB_EVOLVE_SPIN_alp][0] = spindyn->data[EOB_EVOLVE_SPIN_alp][1];
       spindyn->data[EOB_EVOLVE_SPIN_gam][0] = spindyn->data[EOB_EVOLVE_SPIN_gam][1];
