@@ -1274,7 +1274,15 @@ int eob_dyn_adiabLSO(Dynamics *dyn, double *rLSO)
   double x;
   double x_lo = 4.5; // 4.532648e+00 nu= 1/4
   double x_hi = 6.2; // 6 nu=0
-  if (EOBPars->use_tidal) x_hi = 36.;
+  if (EOBPars->use_tidal) {
+    x_hi = 36.;
+    /* The TEOBRESUM tidal potential is resummed around the light-ring
+       pole (1-rLR_tidal*u) and is only valid outside it; at very high
+       tidal deformability rLR_tidal can sit past the default x_lo=4.5,
+       so start the search past it to avoid raising a non-integer power
+       of a negative base (NaN). */
+    if (EOBPars->rLR_tidal*1.01 > x_lo) x_lo = EOBPars->rLR_tidal*1.01;
+  }
 
   gsl_root_fsolver *s;
   gsl_function F;
