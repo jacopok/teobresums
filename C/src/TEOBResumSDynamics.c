@@ -1270,13 +1270,34 @@ int eob_dyn_adiabLSO(Dynamics *dyn, double *rLSO)
   const gsl_root_fsolver_type *T;
   double x;
   double x_lo = 4.5; // 4.532648e+00 nu= 1/4
-  double x_hi = 6.2; // 6 nu=0 
-  if (EOBPars->use_tidal) x_hi = 36.; 
-  
+  double x_hi = 6.2; // 6 nu=0
+  if (EOBPars->use_tidal) x_hi = 36.;
+
   gsl_root_fsolver *s;
   gsl_function F;
   F.function = &eob_dyn_fLSO;
   F.params = dyn;
+
+  /* At very high tidal deformability the LSO can sit past r=36 (unlike
+     eob_dyn_adiabLR above, this search used a fixed bracket with no check
+     that it actually straddles a root); widen x_hi until it does, mirroring
+     eob_dyn_adiabLR's bracket search. Without this, gsl_root_fsolver_set
+     aborts the whole process instead of returning ROOT_ERRORS_BRACKET. */
+  double f_lo = eob_dyn_fLSO(x_lo, dyn);
+  double f_hi = eob_dyn_fLSO(x_hi, dyn);
+  if (f_lo*f_hi > 0) {
+    for (int itr = 0; itr < 100; itr++) {
+      x_hi *= 1.01;
+      f_hi = eob_dyn_fLSO(x_hi, dyn);
+      if (f_lo*f_hi < 0) break;
+    }
+  }
+  if (f_lo*f_hi > 0) {
+    printf("ERROR: no zero in interval for eob_dyn_adiabLSO\n");
+    printf("f_lo = %e, f_hi = %e\n", f_lo, f_hi);
+    return ROOT_ERRORS_BRACKET;
+  }
+
   //T = gsl_root_fsolver_bisection;
   T = gsl_root_fsolver_brent;
   s = gsl_root_fsolver_alloc (T);
