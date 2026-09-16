@@ -1176,6 +1176,9 @@ int eob_dyn_adiabLR(Dynamics *dyn, double *rLR)
       x_lo *= 0.99;
       f_lo = eob_dyn_fLR(x_lo, dyn);
       if (f_lo*f_hi < 0) break;
+      x_hi *= 1.01;
+      f_hi = eob_dyn_fLR(x_hi, dyn);
+      if (f_lo*f_hi < 0) break;
     }
   }
 
