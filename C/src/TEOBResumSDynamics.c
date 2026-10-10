@@ -1171,7 +1171,7 @@ int eob_dyn_adiabLR(Dynamics *dyn, double *rLR)
   double f_lo = eob_dyn_fLR(x_lo, dyn);
   double f_hi = eob_dyn_fLR(x_hi, dyn);
   if (f_lo*f_hi > 0) {
-    printf("Iterative procedure to find the bracket\n");
+    if (VERBOSE) printf("Iterative procedure to find the bracket\n");
     for (int itr = 0; itr < 100; itr++) {
       x_lo *= 0.99;
       f_lo = eob_dyn_fLR(x_lo, dyn);
