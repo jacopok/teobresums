@@ -778,8 +778,11 @@ static PyObject* EOBRunPy(PyObject* self, PyObject* args)
     return NULL;
   }
 
-  if(EOBPars->LambdaAl2 > 1. && EOBPars->LambdaBl2 > 1.)  default_choice = BINARY_BNS;
-  if(EOBPars->LambdaAl2 == 0. && EOBPars->LambdaBl2 > 1.) default_choice = BINARY_BHNS;
+  /* BNS whenever both stars have tides: below Lambda = 1 the NS fits are
+     continued to their black-hole values (see continued_fit) instead of
+     switching to the BBH settings */
+  if(EOBPars->LambdaAl2 > 0. && EOBPars->LambdaBl2 > 0.)  default_choice = BINARY_BNS;
+  if(EOBPars->LambdaAl2 == 0. && EOBPars->LambdaBl2 > 0.) default_choice = BINARY_BHNS;
   if(EOBPars->LambdaAl2 > 0. && EOBPars->LambdaBl2 == 0.) default_choice = BINARY_BHNS;
   if(EOBPars->ecc !=0 || EOBPars->r_hyp !=0) model = MODEL_DALI; 
 

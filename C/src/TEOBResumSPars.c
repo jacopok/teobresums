@@ -492,6 +492,47 @@ void EOBParameters_defaults (int binary, int model, EOBParameters *eobp)
 
 }
 
+/* The quasi-universal NS fits used in eob_set_params are polynomials in log(Lambda_2),
+   calibrated on NS equations of state (Lambda_2 >~ 1). Extrapolated below that they
+   diverge as Lambda_2 -> 0 (C_Q has a minimum near 0.5 and then grows without bound,
+   Lambda_3,4 eventually blow up). Below TEOB_FIT_LAMBDA_MIN each fit X is continued
+   with the quadratic in Lambda_2 that tends to the black-hole value X_BH at 0
+   (C_Q = C_Oct = C_Hex = 1, Lambda_l = Sigma = 0) and matches X and dX/dLambda_2 at
+   the threshold: so X is C^1 there and analytic at Lambda_2 = 0 (a power law
+   Lambda_2^s would have an infinite slope at 0 for s < 1, e.g. s ~ 0.5 for C_Q).
+   It is monotonic on [0, 1] as long as the log-slope of X - X_BH at 1 is in (0, 2),
+   as it is for all the fits here. Above the threshold the fits are unchanged. */
+#define TEOB_FIT_LAMBDA_MIN (1.0)
+
+typedef double (*TEOB_lambda_fit)(double barlam2, int ell);
+
+static double fit_spin_multipoles(double barlam2, int ell)
+{
+  /* ell = 2: C_Q, ell = 3: C_Oct, ell = 4: C_Hex */
+  const double C_Q = exp(YagiYunes13_fit_logQ(log(barlam2)));
+  if (ell == 3) return Yagi14_fit_Coct(C_Q);
+  if (ell == 4) return Yagi14_fit_Chex(C_Q);
+  return C_Q;
+}
+
+static double fit_sigma_irrotational(double barlam2, int ell)
+{
+  (void) ell;
+  return JFAPG_fit_Sigma_Irrotational(barlam2);
+}
+
+static double continued_fit(TEOB_lambda_fit fit, double barlam2, int ell, double X_BH)
+{
+  if (barlam2 >= TEOB_FIT_LAMBDA_MIN || barlam2 <= 0.) return fit(barlam2, ell);
+  const double L1 = TEOB_FIT_LAMBDA_MIN;
+  const double h  = 1e-4;
+  const double D  = fit(L1, ell) - X_BH;
+  /* L1 dX/dLambda_2 at the threshold */
+  const double dX = (fit(L1*exp(h), ell) - fit(L1*exp(-h), ell))/(2.*h);
+  const double x  = barlam2/L1;
+  return X_BH + (2.*D - dX)*x + (dX - D)*x*x;
+}
+
 /**
  * Function: eob_set_params
  * ------------------------
@@ -630,32 +671,32 @@ int eob_set_params(int default_choice, int firstcall)
     /* Set the tidal parameters */
     
     if (EOBPars->use_lambda234_fits == Lambda234_fits_YAGI13) {
-      EOBPars->LambdaAl3 = Yagi13_fit_barlamdel(EOBPars->LambdaAl2, 3);
-      EOBPars->LambdaBl3 = Yagi13_fit_barlamdel(EOBPars->LambdaBl2, 3);
-      EOBPars->LambdaAl4 = Yagi13_fit_barlamdel(EOBPars->LambdaAl2, 4);
-      EOBPars->LambdaBl4 = Yagi13_fit_barlamdel(EOBPars->LambdaBl2, 4);
+      EOBPars->LambdaAl3 = continued_fit(Yagi13_fit_barlamdel, EOBPars->LambdaAl2, 3, 0.);
+      EOBPars->LambdaBl3 = continued_fit(Yagi13_fit_barlamdel, EOBPars->LambdaBl2, 3, 0.);
+      EOBPars->LambdaAl4 = continued_fit(Yagi13_fit_barlamdel, EOBPars->LambdaAl2, 4, 0.);
+      EOBPars->LambdaBl4 = continued_fit(Yagi13_fit_barlamdel, EOBPars->LambdaBl2, 4, 0.);
     } else if (EOBPars->use_lambda234_fits == Lambda234_fits_GODZIEBA20) {
-      EOBPars->LambdaAl3 = Godzieba20_fit_barlamdel(EOBPars->LambdaAl2, 3);
-      EOBPars->LambdaBl3 = Godzieba20_fit_barlamdel(EOBPars->LambdaBl2, 3);
-      EOBPars->LambdaAl4 = Godzieba20_fit_barlamdel(EOBPars->LambdaAl2, 4);
-      EOBPars->LambdaBl4 = Godzieba20_fit_barlamdel(EOBPars->LambdaBl2, 4);
+      EOBPars->LambdaAl3 = continued_fit(Godzieba20_fit_barlamdel, EOBPars->LambdaAl2, 3, 0.);
+      EOBPars->LambdaBl3 = continued_fit(Godzieba20_fit_barlamdel, EOBPars->LambdaBl2, 3, 0.);
+      EOBPars->LambdaAl4 = continued_fit(Godzieba20_fit_barlamdel, EOBPars->LambdaAl2, 4, 0.);
+      EOBPars->LambdaBl4 = continued_fit(Godzieba20_fit_barlamdel, EOBPars->LambdaBl2, 4, 0.);
     } else if (EOBPars->use_lambda234_fits == Lambda2345678_fits_GODZIEBA20) {
-      EOBPars->LambdaAl3 = Godzieba20_fit_barlamdel(EOBPars->LambdaAl2, 3);
-      EOBPars->LambdaBl3 = Godzieba20_fit_barlamdel(EOBPars->LambdaBl2, 3);
-      EOBPars->LambdaAl4 = Godzieba20_fit_barlamdel(EOBPars->LambdaAl2, 4);
-      EOBPars->LambdaBl4 = Godzieba20_fit_barlamdel(EOBPars->LambdaBl2, 4);
-      EOBPars->LambdaAl5 = Godzieba20_fit_barlamdel(EOBPars->LambdaAl2, 5);
-      EOBPars->LambdaBl5 = Godzieba20_fit_barlamdel(EOBPars->LambdaBl2, 5);
-      EOBPars->LambdaAl6 = Godzieba20_fit_barlamdel(EOBPars->LambdaAl2, 6);
-      EOBPars->LambdaBl6 = Godzieba20_fit_barlamdel(EOBPars->LambdaBl2, 6);
-      EOBPars->LambdaAl7 = Godzieba20_fit_barlamdel(EOBPars->LambdaAl2, 7);
-      EOBPars->LambdaBl7 = Godzieba20_fit_barlamdel(EOBPars->LambdaBl2, 7);
-      EOBPars->LambdaAl8 = Godzieba20_fit_barlamdel(EOBPars->LambdaAl2, 8);
-      EOBPars->LambdaBl8 = Godzieba20_fit_barlamdel(EOBPars->LambdaBl2, 8);
+      EOBPars->LambdaAl3 = continued_fit(Godzieba20_fit_barlamdel, EOBPars->LambdaAl2, 3, 0.);
+      EOBPars->LambdaBl3 = continued_fit(Godzieba20_fit_barlamdel, EOBPars->LambdaBl2, 3, 0.);
+      EOBPars->LambdaAl4 = continued_fit(Godzieba20_fit_barlamdel, EOBPars->LambdaAl2, 4, 0.);
+      EOBPars->LambdaBl4 = continued_fit(Godzieba20_fit_barlamdel, EOBPars->LambdaBl2, 4, 0.);
+      EOBPars->LambdaAl5 = continued_fit(Godzieba20_fit_barlamdel, EOBPars->LambdaAl2, 5, 0.);
+      EOBPars->LambdaBl5 = continued_fit(Godzieba20_fit_barlamdel, EOBPars->LambdaBl2, 5, 0.);
+      EOBPars->LambdaAl6 = continued_fit(Godzieba20_fit_barlamdel, EOBPars->LambdaAl2, 6, 0.);
+      EOBPars->LambdaBl6 = continued_fit(Godzieba20_fit_barlamdel, EOBPars->LambdaBl2, 6, 0.);
+      EOBPars->LambdaAl7 = continued_fit(Godzieba20_fit_barlamdel, EOBPars->LambdaAl2, 7, 0.);
+      EOBPars->LambdaBl7 = continued_fit(Godzieba20_fit_barlamdel, EOBPars->LambdaBl2, 7, 0.);
+      EOBPars->LambdaAl8 = continued_fit(Godzieba20_fit_barlamdel, EOBPars->LambdaAl2, 8, 0.);
+      EOBPars->LambdaBl8 = continued_fit(Godzieba20_fit_barlamdel, EOBPars->LambdaBl2, 8, 0.);
     }
     if(EOBPars->use_tidal_gravitomagnetic){
-      EOBPars->SigmaAl2 = JFAPG_fit_Sigma_Irrotational(EOBPars->LambdaAl2);
-      EOBPars->SigmaBl2 = JFAPG_fit_Sigma_Irrotational(EOBPars->LambdaBl2);
+      EOBPars->SigmaAl2 = continued_fit(fit_sigma_irrotational, EOBPars->LambdaAl2, 2, 0.);
+      EOBPars->SigmaBl2 = continued_fit(fit_sigma_irrotational, EOBPars->LambdaBl2, 2, 0.);
     }
 
     /* Tidal coupling constants */
@@ -712,16 +753,14 @@ int eob_set_params(int default_choice, int firstcall)
     EOBPars->C_Hex1 = 1.;
     EOBPars->C_Hex2 = 1.;
     if (EOBPars->LambdaAl2>0.) {
-      double logC_Q1 = YagiYunes13_fit_logQ(log(EOBPars->LambdaAl2));
-      EOBPars->C_Q1           = exp(logC_Q1);
-      EOBPars->C_Oct1         = Yagi14_fit_Coct(EOBPars->C_Q1);
-      EOBPars->C_Hex1         = Yagi14_fit_Chex(EOBPars->C_Q1);
+      EOBPars->C_Q1           = continued_fit(fit_spin_multipoles, EOBPars->LambdaAl2, 2, 1.);
+      EOBPars->C_Oct1         = continued_fit(fit_spin_multipoles, EOBPars->LambdaAl2, 3, 1.);
+      EOBPars->C_Hex1         = continued_fit(fit_spin_multipoles, EOBPars->LambdaAl2, 4, 1.);
     }
     if (EOBPars->LambdaBl2>0.) {
-      double logC_Q2 = YagiYunes13_fit_logQ(log(EOBPars->LambdaBl2));
-      EOBPars->C_Q2           = exp(logC_Q2);
-      EOBPars->C_Oct2         = Yagi14_fit_Coct(EOBPars->C_Q2);
-      EOBPars->C_Hex2         = Yagi14_fit_Chex(EOBPars->C_Q2);
+      EOBPars->C_Q2           = continued_fit(fit_spin_multipoles, EOBPars->LambdaBl2, 2, 1.);
+      EOBPars->C_Oct2         = continued_fit(fit_spin_multipoles, EOBPars->LambdaBl2, 3, 1.);
+      EOBPars->C_Hex2         = continued_fit(fit_spin_multipoles, EOBPars->LambdaBl2, 4, 1.);
     }
     
     /* Set the f-mode frequencies from fits, if needed */
@@ -1460,9 +1499,9 @@ int EOBParameters_parse_commandline(EOBParameters *eobp, int argc, char **argv)
         ./TEOBResumS -h\n");
     }
   }
-  if (eobp->LambdaAl2 > 1. && eobp->LambdaBl2 > 1.)
+  if (eobp->LambdaAl2 > 0. && eobp->LambdaBl2 > 0.)
     eobp->binary = BINARY_BNS;
-  else if (eobp->LambdaAl2 == 0. && eobp->LambdaBl2 > 1.)
+  else if (eobp->LambdaAl2 == 0. && eobp->LambdaBl2 > 0.)
     eobp->binary = BINARY_BHNS;
   else
     eobp->binary = BINARY_BBH;
