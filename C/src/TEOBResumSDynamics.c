@@ -2356,6 +2356,7 @@ int eob_spin_dyn_integrate(DynamicsSpin *dyn, Dynamics *eobdyn, Waveform_lm *hlm
     if (VERBOSE) printf("iter %09d | t=%.f | momg= %.17f | alpha=%.6f | beta=%.6f | Lhz=%.20f\n", iter, dyn->t, dyn->y[EOB_EVOLVE_SPIN_Momg], dyn->y[EOB_EVOLVE_SPIN_alp], dyn->y[EOB_EVOLVE_SPIN_bet], dyn->y[EOB_EVOLVE_SPIN_Lz]); 
     iter++;
 
+    const double t_prev = dyn->t;
     //GSLSTATUS = gsl_odeiv2_evolve_apply_fixed_step (e, c, s, &sys, &dyn->t, dyn->dt, dyn->y);//uniform
     GSLSTATUS = gsl_odeiv2_evolve_apply (e, c, s, &sys, &dyn->t, tstop, &dyn->dt, dyn->y);
 
@@ -2404,7 +2405,12 @@ int eob_spin_dyn_integrate(DynamicsSpin *dyn, Dynamics *eobdyn, Waveform_lm *hlm
       if (VERBOSE) printf("Stop: Momg < 0.\n");
       break;
     }
-    if (EOBPars->spin_flx != SPIN_FLX_EOB && dyn->dt > 0 && (dyn->y[EOB_EVOLVE_SPIN_Momg] - dyn->data[EOB_EVOLVE_SPIN_Momg][i0+iter-1] < 1e-15) ){
+    /* Plateau: dMomg/dt far below its leading-order (96/5) nu Momg^(11/3).
+       An absolute threshold on the increment would stop at once for a low
+       starting frequency, where the early steps change Momg by < 1e-15 */
+    const double momg_prev = dyn->data[EOB_EVOLVE_SPIN_Momg][i0+iter-1];
+    const double momg_rate_lo = 96./5.*EOBPars->nu*pow(momg_prev, 11./3.);
+    if (EOBPars->spin_flx != SPIN_FLX_EOB && dyn->dt > 0 && (dyn->y[EOB_EVOLVE_SPIN_Momg] - momg_prev < 1e-3*momg_rate_lo*(dyn->t - t_prev)) ){
       iter--; //don't count this iteration
       if (VERBOSE) printf("Stop: Forward integration, Momg reached a plateau.\n");
       break;
