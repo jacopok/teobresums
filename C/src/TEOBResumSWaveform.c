@@ -9524,6 +9524,105 @@ void compute_hpc(Waveform_lm *hlm, Waveform_lm *hlm_neg, Waveform_lm *hl0, doubl
 }
 
 /**
+  * Function: spa_fdot_peak
+  * -----------------------
+  *   Peak of Fdot between the samples, for the attachment of the SPA tail.
+  *
+  *   The time from a low starting frequency is large (~1e10 M), so its
+  *   rounding leaves ~1e-7 rad of noise in phase(time); in Fdot, its second
+  *   derivative over steps of ~0.1 M, that noise is comparable to the drop of
+  *   Fdot within several samples of its flat peak, and the sample of the peak
+  *   (hence the time the SPA tail continues at) jumps between neighbouring
+  *   parameters. Here phase(time) is fitted by least squares around the peak
+  *   instead, recentring the window on the peak found; the window tapers to
+  *   zero, so that samples enter and leave it smoothly.
+  *
+  *   @param[in]   t, phase : time-domain mode, size points
+  *   @param[in]   n1       : sample of the peak (initial guess)
+  *   @param[out]  tpk, Fpk, psipk : time, frequency and SPA phase at the peak
+  *   @param[out]  n        : first sample after the peak
+  *   @param[out]  Fdotn    : Fdot at sample n-1 from the fit
+  *
+  *   @return 1 if the peak was found, 0 otherwise (outputs untouched)
+*/
+static int spa_fdot_peak(const double *t, const double *phase, const int size,
+                         const int n1, double *tpk, double *Fpk, double *psipk,
+                         int *n, double *Fdotn)
+{
+  enum {ncoef = 7};          /* degree 6 */
+  const double w = 2.5;      /* half width of the window, in M */
+  const double tref = t[n1], pref = phase[n1];
+  double tc = 0.;            /* peak, relative to tref */
+  double c[ncoef] = {0.};
+  int found = 0;
+
+  const int maxiter = 20;
+  for (int iter = 0; iter < maxiter; iter++) {
+    const double tprev = tc;
+    int a = n1, b = n1;      /* window [a, b] */
+    while (a > 0      && t[a-1] - tref >= tc - w) a--;
+    while (b < size-1 && t[b+1] - tref <= tc + w) b++;
+    while (a < n1 && t[a] - tref < tc - w) a++;
+    while (b > n1 && t[b] - tref > tc + w) b--;
+    const int npts = b - a + 1;
+    /* enough points, and on both sides */
+    if (npts < 2*ncoef || t[a] - tref > tc - 0.5*w || t[b] - tref < tc + 0.5*w) return 0;
+
+    gsl_matrix *X = gsl_matrix_alloc(npts, ncoef);
+    gsl_matrix *cov = gsl_matrix_alloc(ncoef, ncoef);
+    gsl_vector *y = gsl_vector_alloc(npts), *wt = gsl_vector_alloc(npts), *cc = gsl_vector_alloc(ncoef);
+    gsl_multifit_linear_workspace *ws = gsl_multifit_linear_alloc(npts, ncoef);
+    double chisq;
+    for (int i = 0; i < npts; i++) {
+      const double x = (t[a+i] - tref - tc)/w;
+      double xp = 1.;
+      for (int j = 0; j < ncoef; j++, xp *= x) gsl_matrix_set(X, i, j, xp);
+      gsl_vector_set(y, i, phase[a+i] - pref);
+      gsl_vector_set(wt, i, SQ(1. - x*x));
+    }
+    const int status = gsl_multifit_wlinear(X, wt, y, cc, cov, &chisq, ws);
+    for (int j = 0; j < ncoef; j++) c[j] = gsl_vector_get(cc, j);
+    gsl_multifit_linear_free(ws);
+    gsl_vector_free(y); gsl_vector_free(wt); gsl_vector_free(cc);
+    gsl_matrix_free(X); gsl_matrix_free(cov);
+    if (status) return 0;
+
+    /* Newton for the zero of the third derivative (the peak of Fdot) */
+    double x = 0., d3, d4;
+    for (int it = 0; it < 50; it++) {
+      d3 = 6.*c[3] + x*(24.*c[4] + x*(60.*c[5] + x*120.*c[6]));
+      d4 = 24.*c[4] + x*(120.*c[5] + x*360.*c[6]);
+      if (d4 >= 0.) return 0;     /* not a maximum */
+      const double dx = -d3/d4;
+      x += dx;
+      if (!(fabs(x) < 1.)) return 0;
+      if (fabs(dx) < 1e-12) break;
+    }
+    tc += w*x;
+    if (fabs(tc) > w) return 0;
+    if (fabs(tc - tprev) < 1e-6 || iter == maxiter-1) {
+      /* phase and derivatives at the peak and at the last sample before it */
+      const double ph = pref + c[0] + x*(c[1] + x*(c[2] + x*(c[3] + x*(c[4] + x*(c[5] + x*c[6])))));
+      const double om = (c[1] + x*(2.*c[2] + x*(3.*c[3] + x*(4.*c[4] + x*(5.*c[5] + x*6.*c[6])))))/w;
+      int m = a;
+      while (m < size && t[m] - tref <= tc) m++;
+      if (m < 2 || m >= size) return 0;
+      const double xm = (t[m-1] - tref - tprev)/w;
+      const double fd = (2.*c[2] + xm*(6.*c[3] + xm*(12.*c[4] + xm*(20.*c[5] + xm*30.*c[6]))))/(w*w)/TwoPi;
+      if (!(fd > 0.)) return 0;
+      *tpk = tref + tc;
+      *Fpk = om/TwoPi;
+      *psipk = om*(tref + tc) - ph - Pi/4.;
+      *n = m;
+      *Fdotn = fd;
+      found = 1;
+      break;
+    }
+  }
+  return found;
+}
+
+/**
   * Function: SPA
   * -------------
   *   Routine to compute the mode-by-mode stationary phase approximation
@@ -9584,6 +9683,11 @@ void SPA(Waveform_lm *TDlm, WaveformFD_lm *FDlm)
     /* Get last index until Fdot is monotonically increasing (for attachment) */
     int n = 1;
     while(FDlm->Fdot[k][n] > FDlm->Fdot[k][n-1] && n<size) n++;
+    /* The same between the samples, from a fit: without it the attachment
+       jumps by whole samples between neighbouring parameters */
+    double tpk, Fpk, psipk, Fdotn;
+    const int refined = (n < size) ? spa_fdot_peak(TDlm->time, TDlm->phase[k], size, n-1,
+                                                   &tpk, &Fpk, &psipk, &n, &Fdotn) : 0;
     /* Prolong the waveform, if necessary  
        - Fill the points between Fmax and half_srate_interp such that 
          FDlm->F[k][n] > half_srate_interp (strictly larger)
@@ -9597,6 +9701,12 @@ void SPA(Waveform_lm *TDlm, WaveformFD_lm *FDlm)
       double An1 = FDlm->ampli[k][n-1];
       double pn1 =  FDlm->phase[k][n-1];
       double b = TwoPi * TDlm->time[n-1];
+      if (refined) {
+        /* line through the peak, written as one through Fn1 */
+        b   = TwoPi * tpk;
+        pn1 = psipk + b*(Fn1 - Fpk);
+        An1 = TDlm->ampli[k][n1]/sqrt(Fdotn);
+      }
       double dfk = (half_srate_interp - FDlm->F[k][n1])/(size-n-1); // one point more
       for (int i=n; i < size; i++){
         FDlm->F[k][i] = Fn1 + (i-n1)*dfk;

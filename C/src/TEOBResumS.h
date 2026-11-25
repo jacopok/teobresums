@@ -26,6 +26,7 @@
 #include <gsl/gsl_complex.h>
 #include <gsl/gsl_spline.h>
 #include <gsl/gsl_matrix.h>
+#include <gsl/gsl_multifit.h>
 #include <gsl/gsl_odeiv2.h>
 
 #ifdef _OPENMP
